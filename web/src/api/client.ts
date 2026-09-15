@@ -31,12 +31,27 @@ export class ApiError extends Error {
 export interface RequestOptions extends Omit<RequestInit, 'body' | 'credentials'> {
   /** Cuerpo de la petición; se envía serializado como JSON. */
   body?: unknown;
+  /**
+   * No avisar al manejador global de `401`. Lo usan el login (muestra su propio error) y la
+   * comprobación inicial de la sesión (en una visita anónima el `401` es lo normal).
+   */
+  skipUnauthorizedHandler?: boolean;
+}
+
+let unauthorizedHandler: (() => void) | null = null;
+
+/**
+ * Registra la reacción global a un `401` (la sesión expiró o el usuario fue desactivado o
+ * eliminado). La instala AuthContext; `null` la retira.
+ */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
 }
 
 const INVALID_JSON = Symbol('invalid-json');
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, headers: extraHeaders, ...init } = options;
+  const { body, headers: extraHeaders, skipUnauthorizedHandler = false, ...init } = options;
   const headers = new Headers(extraHeaders);
   headers.set('Accept', 'application/json');
   if (body !== undefined) {
@@ -60,6 +75,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   const data = await readJson(response);
+  if (response.status === 401 && !skipUnauthorizedHandler) {
+    unauthorizedHandler?.();
+  }
   if (response.ok && data !== INVALID_JSON) {
     return data as T;
   }
