@@ -1,6 +1,9 @@
 # Entorno local completo:  docker compose up -d --build  →  http://localhost:8080
 # Funciona sin crear .env: cada variable tiene aquí su valor de demo por defecto
 # (para cambiarlos, copia .env.example a .env).
+#
+# Puertos del host configurables (WEB_PORT, API_PORT, LAMBDA_PORT, DB_PORT) por si alguno ya está
+# ocupado en la máquina. Los de depuración (api, lambda, db) solo escuchan en 127.0.0.1.
 
 x-database-url: &database-url "postgres://app:${POSTGRES_PASSWORD:-app}@db:5432/portal"
 
@@ -13,16 +16,16 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
       POSTGRES_DB: portal
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # Sin start_interval (exige Docker Engine 25+): un intervalo corto sirve en cualquier versión.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d portal"]
-      interval: 10s
+      interval: 3s
       timeout: 5s
-      retries: 5
+      retries: 20
       start_period: 30s
-      start_interval: 1s
 
   # Tarea de una sola ejecución: aplica las migraciones pendientes (esquema + SeedDemoData) y
   # termina. TypeORM registra cada migración en la tabla "migrations", así que volver a
@@ -54,7 +57,7 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${API_PORT:-3000}:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -62,11 +65,10 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
       start_period: 30s
-      start_interval: 2s
 
   # Lambda de métricas en su imagen oficial, que incluye el Runtime Interface Emulator (RIE):
   # se ejecuta en local sin cuenta de AWS. Invocación directa desde el host:
@@ -82,7 +84,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:-app}
       PGDATABASE: portal
     ports:
-      - "9000:8080"
+      - "127.0.0.1:${LAMBDA_PORT:-9000}:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -91,7 +93,7 @@ services:
     build: ./web
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${WEB_PORT:-8080}:80"
     depends_on:
       api:
         condition: service_healthy

@@ -1,5 +1,13 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Todo archivo de texto se guarda y se extrae con LF en cualquier sistema operativo, aunque Git
+# tenga core.autocrlf=true (Windows): los archivos que copian los Dockerfiles a contenedores Linux
+# son idénticos en todas las máquinas.
+* text=auto eol=lf
 
-# Scripts ejecutados en contenedores Linux: siempre LF (evita CRLF al clonar en Windows)
+# Scripts ejecutados con bash: LF siempre (con CRLF fallan)
 *.sh text eol=lf
+
+# Binarios
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
