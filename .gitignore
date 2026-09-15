@@ -140,3 +140,6 @@ cookies.txt
 
 # AWS SAM (build local y bundle de la API generados por scripts/deploy.sh)
 .aws-sam/
+
+# Registros de scripts/verify.mjs
+.verify-logs/

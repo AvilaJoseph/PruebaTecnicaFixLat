@@ -208,7 +208,8 @@ api/              API NestJS (auth, users, notes, metrics, health) + migraciones
 lambda/metrics/   Lambda de métricas (TypeScript, pg) + Dockerfile con RIE
 web/              SPA React + Vite, servida por nginx (nginx.conf: proxy /api)
 infra/            template.yaml (SAM/CloudFormation), ec2/docker-compose.yml, env.sam-local.json
-scripts/          smoke.sh (prueba integral), deploy.sh, teardown.sh, aws-common.sh
+scripts/          verify.mjs (verificación completa), smoke.sh, deploy.sh, teardown.sh, aws-common.sh
+tests/ui/         prueba de la interfaz en navegador real (puppeteer-core)
 docs/             PLANEACION.md (plan y contratos), GUION_VIDEO.md
 docker-compose.yml, .env.example
 ```
@@ -285,6 +286,40 @@ Tarda ~10-20 min, porque CloudFront y las interfaces de red de la Lambda se libe
 
 ## 10. Pruebas
 
+### Todo con un solo comando
+
+Requiere Docker y Node.js 22+. Funciona igual en PowerShell, bash, macOS y Linux:
+
+```bash
+node scripts/verify.mjs
+```
+
+El comando levanta el entorno y ejecuta en orden:
+1. API: tipos, lint, formato y pruebas unitarias.
+2. Lambda: tipos y pruebas.
+3. Web: build.
+4. Auditoría de dependencias.
+5. Smoke test.
+6. Prueba de la interfaz en un navegador real: acceso, roles, crear, editar, Guardar, arrastrar,
+   recargar y eliminar notas, dashboard, y usuarios (crear, desactivar con sesión abierta,
+   reactivar, último administrador).
+7. API: pruebas e2e.
+8. Infraestructura AWS: compose de EC2, sintaxis de los scripts y `sam validate --lint`.
+
+Al final muestra un resumen y termina con código distinto de 0 si algo falla. El detalle de cada
+paso queda en `.verify-logs/`.
+
+- **Opciones:** `--no-build` usa el entorno ya levantado, `--reinstall` fuerza `npm ci` y
+  `--skip-ui` omite el navegador.
+- **Herramientas opcionales:** si falta alguna, su paso se marca como *omitido* en lugar de fallar.
+  El smoke test necesita bash + curl (en Windows, Git Bash); la prueba de interfaz, Chrome, Edge o
+  Chromium (`BROWSER_PATH` para otra ruta); y la validación de la plantilla, AWS SAM CLI.
+- **Datos que deja:** las pruebas e2e y de interfaz crean datos en la base de datos local. La nota
+  de prueba se elimina, pero el usuario de prueba queda inactivo porque los usuarios no se borran.
+  `docker compose down -v` la reinicia.
+
+### Pruebas por separado
+
 | Prueba | Comando | Necesita |
 |--------|---------|----------|
 | Integral (web → API → Lambda → BD) | `bash scripts/smoke.sh` | App levantada, bash y curl |
@@ -292,6 +327,7 @@ Tarda ~10-20 min, porque CloudFront y las interfaces de red de la Lambda se libe
 | API e2e (Jest + Supertest) | `cd api && npm run test:e2e` | Node 22 y `docker compose up -d` (BD en `localhost:5432`) |
 | Lambda | `cd lambda/metrics && npm ci && npm test` | Node 22 |
 | Web (tipos) | `cd web && npm ci && npm run typecheck` | Node 22 |
+| Interfaz en navegador real | `cd tests/ui && npm ci && node ui-check.mjs` | App levantada y Chrome, Edge o Chromium |
 
 - `smoke.sh` recorre health → login → métricas → crear nota → moverla → métricas +1 → eliminar →
   logout → `401`. Compara las cifras de forma relativa, así que puede repetirse sobre cualquier base

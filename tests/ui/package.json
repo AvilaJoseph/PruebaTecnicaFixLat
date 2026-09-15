@@ -1,0 +1,11 @@
+{
+  "name": "portal-ui-check",
+  "version": "0.1.0",
+  "description": "Prueba de la interfaz en navegador real (puppeteer-core)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}
