@@ -6,6 +6,7 @@ import { validate } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { NotesModule } from './notes/notes.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { NotesModule } from './notes/notes.module';
     HealthModule,
     MetricsModule,
     NotesModule,
+    UsersModule,
   ],
 })
 export class AppModule {}

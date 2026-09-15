@@ -608,3 +608,202 @@ h1 {
   border-radius: 3px;
   background: var(--status-color);
 }
+
+/* Administración de usuarios */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.button--danger {
+  background: #fff;
+  border-color: #f5c2c0;
+  color: #9b1c1c;
+}
+
+.button--danger:not(:disabled):hover {
+  background: #fdecea;
+}
+
+.field select {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-weight: 400;
+}
+
+.field select:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: #e02424;
+}
+
+.field__hint,
+.field__error {
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.field__hint {
+  color: var(--color-muted);
+}
+
+.field__error {
+  color: #9b1c1c;
+}
+
+.users {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 64rem;
+}
+
+.users__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.users__toolbar h1 {
+  margin: 0;
+}
+
+.users__hint {
+  margin: 0;
+  max-width: 40rem;
+  font-size: 0.9rem;
+}
+
+.users__summary {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.alert__action {
+  margin-left: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.table-scroll {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.users-table th,
+.users-table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.users-table th {
+  background: #f8fafc;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.users-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.users-table__row--inactive .users-table__name,
+.users-table__row--inactive .users-table__email {
+  color: var(--color-muted);
+}
+
+.users-table__self {
+  margin-left: 0.35rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.users-table__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Estado activo/inactivo: punto de color, distinto de las insignias de rol. */
+.user-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+}
+
+.user-state::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #22a05a;
+}
+
+.user-state--inactive {
+  color: var(--color-muted);
+}
+
+.user-state--inactive::before {
+  background: #9aa5b1;
+}
+
+/* Diálogo modal (<dialog>) */
+
+.dialog {
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: inherit;
+}
+
+.dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.dialog__form {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.dialog__form h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}

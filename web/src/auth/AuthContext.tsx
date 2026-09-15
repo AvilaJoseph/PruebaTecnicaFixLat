@@ -12,6 +12,8 @@ import { api, setUnauthorizedHandler } from '../api/client';
 import type { User } from './types';
 
 const SESSION_ENDED_NOTICE = 'Sesión finalizada o usuario inactivo. Vuelve a iniciar sesión.';
+const SELF_DEACTIVATED_NOTICE =
+  'Desactivaste tu propio usuario. Otro administrador debe reactivarlo para que puedas volver a entrar.';
 
 interface AuthContextValue {
   /** Usuario autenticado; `null` si no hay sesión. */
@@ -23,6 +25,11 @@ interface AuthContextValue {
   clearNotice: () => void;
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
+  /**
+   * Aplica a la sesión un usuario recién editado desde la administración si es el autenticado:
+   * un cambio de rol se refleja al instante y desactivarse a sí mismo cierra la sesión.
+   */
+  syncCurrentUser: (updated: User) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -100,11 +107,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [setUser]);
 
+  const syncCurrentUser = useCallback(
+    (updated: User) => {
+      if (userRef.current?.id !== updated.id) {
+        return;
+      }
+      if (!updated.active) {
+        // La API ya rechaza la cookie; ProtectedRoute redirige a /login con el aviso.
+        setUser(null);
+        setNotice(SELF_DEACTIVATED_NOTICE);
+        return;
+      }
+      setUser(updated);
+    },
+    [setUser],
+  );
+
   const clearNotice = useCallback(() => setNotice(null), []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, notice, clearNotice, login, logout }),
-    [user, loading, notice, clearNotice, login, logout],
+    () => ({ user, loading, notice, clearNotice, login, logout, syncCurrentUser }),
+    [user, loading, notice, clearNotice, login, logout, syncCurrentUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
