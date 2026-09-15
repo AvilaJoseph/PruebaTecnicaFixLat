@@ -46,11 +46,20 @@ services:
       DATABASE_URL: *database-url
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Métricas: la API invoca la Lambda con el SDK de AWS contra el emulador RIE del servicio
+      # metrics-lambda. El SDK exige credenciales aunque el RIE no las valida: son ficticias.
+      METRICS_FUNCTION_NAME: function
+      LAMBDA_ENDPOINT: http://metrics-lambda:8080
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
     ports:
       - "3000:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      metrics-lambda:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 10s
@@ -58,6 +67,25 @@ services:
       retries: 5
       start_period: 30s
       start_interval: 2s
+
+  # Lambda de métricas en su imagen oficial, que incluye el Runtime Interface Emulator (RIE):
+  # se ejecuta en local sin cuenta de AWS. Invocación directa desde el host:
+  #   curl -XPOST http://localhost:9000/2015-03-31/functions/function/invocations -d '{}'
+  metrics-lambda:
+    build: ./lambda/metrics
+    restart: unless-stopped
+    environment:
+      AWS_REGION: us-east-1
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: app
+      PGPASSWORD: ${POSTGRES_PASSWORD:-app}
+      PGDATABASE: portal
+    ports:
+      - "9000:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   web:
     build: ./web

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { validate } from './config/env.validation';
 import { HealthModule } from './health/health.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { NotesModule } from './notes/notes.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { NotesModule } from './notes/notes.module';
     }),
     AuthModule,
     HealthModule,
+    MetricsModule,
     NotesModule,
   ],
 })

@@ -36,10 +36,10 @@ export class EnvironmentVariables {
   @IsBoolean()
   COOKIE_SECURE: boolean = false;
 
-  /** Nombre de la Lambda de métricas (`function` con el emulador RIE local). */
-  @IsOptional()
+  /** Nombre de la Lambda de métricas (`function` es el nombre fijo del emulador RIE local). */
   @IsString()
-  METRICS_FUNCTION_NAME?: string;
+  @IsNotEmpty()
+  METRICS_FUNCTION_NAME: string = 'function';
 
   /** Endpoint de la API de Lambda; vacío = endpoint real de AWS. */
   @IsOptional()
