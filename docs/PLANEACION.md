@@ -792,7 +792,7 @@ bash -n scripts/deploy.sh && bash -n scripts/teardown.sh
 | S3 | | | | | | |
 | S4 | | | | | | |
 | S5 | | | | | | |
-| S6 | | | | | | |
+| S6 | 2026-09-15 | | | | Hecho | `scripts/smoke.sh` verde en el repo y en un clon limpio (sin `.env`), antes y después de `down`/`up`. Posiciones iguales tras reiniciar; borrar todas las notas + reiniciar → 0 (el seed no se repite); `down -v` → vuelve a sembrar 4 notas y 2 cuentas. API 19 unit + 95 e2e, Lambda 4, tsc/eslint/typecheck web limpios. El build del clon reutilizó la caché de capas de Docker. Pendiente: W*/X2/L7-alt → S7; README (A16, L4, G2, E*) → S8; backlog de calidad de S1 (cobertura, `lint` con `--fix`, `X-Powered-By`, puerto 5432 fijo) |
 | S7 | | | | | | |
 | S8 | | | | | | |
 | **Total** | | | | | | |
