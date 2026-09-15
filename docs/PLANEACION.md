@@ -684,7 +684,7 @@ docker compose down -v && cd - && rm -rf "$TEMP/portal-check"
 sam validate --lint -t infra/template.yaml
 sam build -t infra/template.yaml
 docker compose up -d db migrate
-sam local invoke MetricsFunction -t infra/template.yaml --env-vars infra/env.sam-local.json
+sam local invoke MetricsFunction --env-vars infra/env.sam-local.json   # sin -t: usa .aws-sam/build (el handler compilado)
 bash -n scripts/deploy.sh && bash -n scripts/teardown.sh
 ```
 *(Opcional, con cuenta y costo asumido: `deploy.sh` → probar URL → `teardown.sh`.)*
@@ -793,6 +793,6 @@ bash -n scripts/deploy.sh && bash -n scripts/teardown.sh
 | S4 | | | | | | |
 | S5 | | | | | | |
 | S6 | 2026-09-15 | | | | Hecho | `scripts/smoke.sh` verde en el repo y en un clon limpio (sin `.env`), antes y después de `down`/`up`. Posiciones iguales tras reiniciar; borrar todas las notas + reiniciar → 0 (el seed no se repite); `down -v` → vuelve a sembrar 4 notas y 2 cuentas. API 19 unit + 95 e2e, Lambda 4, tsc/eslint/typecheck web limpios. El build del clon reutilizó la caché de capas de Docker. Pendiente: W*/X2/L7-alt → S7; README (A16, L4, G2, E*) → S8; backlog de calidad de S1 (cobertura, `lint` con `--fix`, `X-Powered-By`, puerto 5432 fijo) |
-| S7 | | | | | | |
+| S7 | 2026-09-15 | | | | Hecho (sin despliegue real) | AWS CLI 2.36.45 y SAM CLI 1.166.2 instalados con winget. `sam validate --lint` limpio (cfn-lint sin hallazgos, sin ciclos); `sam build` (esbuild) OK; `sam local invoke` = RIE de Compose = BD (6 notas). `infra/ec2/docker-compose.yml` probado en local desde un bundle `git archive`: health en :80, cookie `Secure`, `/metrics` sin Lambda real → `502 METRICS_UNAVAILABLE`; exige los secretos. UserData renderizado pasa `bash -n`. `deploy.sh`/`teardown.sh`: `bash -n` y validaciones de parámetros probadas; **deploy/teardown contra AWS no ejecutados** (sin cuenta). Añadidos al plan: `CreationPolicy` + `cfn-signal` (el stack espera a `/api/health`), swap de 2 GB (t3.micro), Compose/buildx fijados a las versiones locales, IMDSv2 con 2 saltos, `scripts/aws-common.sh`. En Windows: `sam.cmd`, CRLF de la AWS CLI y esbuild en PATH resueltos en los scripts. Limitaciones → README (S8): el bundle de la API no se actualiza en un stack existente (teardown + deploy), secretos en UserData/NoEcho, :80 de EC2 abierto a Internet (no solo a CloudFront), BD en el disco de la instancia |
 | S8 | | | | | | |
 | **Total** | | | | | | |

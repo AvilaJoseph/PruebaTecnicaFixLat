@@ -1,0 +1,465 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  Portal de equipo con tablero de notas. Frontend en S3 + CloudFront, API NestJS en EC2 dentro de
+  Docker Compose (api + postgres + migrate) y Lambda de metricas. Despliegue: scripts/deploy.sh.
+  Retirada: scripts/teardown.sh.
+
+# Correspondencia con el proyecto local (docs/PLANEACION.md §5):
+#   - EC2 ejecuta infra/ec2/docker-compose.yml con los mismos Dockerfiles de api/ y los mismos
+#     nombres de variables que docker-compose.yml y .env.example.
+#   - MetricsFunction usa el handler index.handler de lambda/metrics, empaquetado con esbuild igual
+#     que su `npm run build`.
+#   - CloudFront reproduce web/nginx.conf: /api/* hacia la API y el resto a la SPA con fallback a
+#     index.html, así el frontend llama siempre a /api relativo (sin CORS, cookie same-origin).
+#
+# Lambda en local con SAM (alternativa al RIE de Compose), contra la BD de `docker compose up`:
+#   sam build -t infra/template.yaml
+#   sam local invoke MetricsFunction --env-vars infra/env.sam-local.json
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC con DNS hostnames habilitados (la VPC por defecto cumple).
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >-
+      Subred publica de esa VPC (ruta a un Internet Gateway). Aloja la instancia y la interfaz de
+      la Lambda.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+    Description: Tipo de instancia de la API (x86_64).
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Parametro publico de SSM con la ultima AMI de Amazon Linux 2023.
+  ArtifactBucket:
+    Type: String
+    AllowedPattern: ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$
+    Description: Bucket de artefactos (bundle de la API y paquete de la Lambda). Lo crea deploy.sh.
+  ApiBundleKey:
+    Type: String
+    AllowedPattern: ^[A-Za-z0-9._/-]+\.zip$
+    Description: Clave del zip con api/ e infra/ec2 dentro de ArtifactBucket.
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9._~-]+$
+    ConstraintDescription: 12-64 caracteres entre letras, numeros y . _ ~ - (forma parte de DATABASE_URL).
+    Description: Contrasena de PostgreSQL (POSTGRES_PASSWORD y PGPASSWORD de la Lambda).
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    MaxLength: 256
+    AllowedPattern: ^[A-Za-z0-9._~-]+$
+    ConstraintDescription: 32-256 caracteres entre letras, numeros y . _ ~ -
+    Description: Secreto con el que la API firma el JWT de sesion (JWT_SECRET).
+  SeedAdminPassword:
+    Type: String
+    NoEcho: true
+    Default: Admin123!
+    MinLength: 8
+    MaxLength: 72
+    AllowedPattern: ^[A-Za-z0-9!#*+.?@_~-]+$
+    ConstraintDescription: 8-72 caracteres entre letras, numeros y ! # * + . ? @ _ ~ -
+    Description: Contrasena de admin@demo.test (SEED_ADMIN_PASSWORD; solo se usa al sembrar la BD).
+  SeedUserPassword:
+    Type: String
+    NoEcho: true
+    Default: Usuario123!
+    MinLength: 8
+    MaxLength: 72
+    AllowedPattern: ^[A-Za-z0-9!#*+.?@_~-]+$
+    ConstraintDescription: 8-72 caracteres entre letras, numeros y ! # * + . ? @ _ ~ -
+    Description: Contrasena de usuario@demo.test (SEED_USER_PASSWORD; solo se usa al sembrar la BD).
+  KeyName:
+    Type: String
+    Default: ''
+    Description: Opcional. Par de claves EC2 para SSH (requiere tambien AllowedSshCidr).
+  AllowedSshCidr:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$
+    Description: Opcional. CIDR autorizado para SSH, p. ej. 203.0.113.10/32.
+
+Conditions:
+  HasSsh: !And
+    - !Not [!Equals [!Ref KeyName, '']]
+    - !Not [!Equals [!Ref AllowedSshCidr, '']]
+
+Resources:
+  # ---------------------------------------------------------------------------------------------
+  # Frontend: bucket privado servido solo por CloudFront (Origin Access Control)
+  # ---------------------------------------------------------------------------------------------
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  FrontendOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${AWS::StackName}-frontend
+        Description: Acceso de CloudFront al bucket del frontend
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # ListBucket hace que un archivo inexistente responda 404 en lugar de 403.
+          - Sid: CloudFrontReadOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt FrontendBucket.Arn
+              - !Sub ${FrontendBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}
+
+  # Equivale a `try_files $uri /index.html` de web/nginx.conf. Solo va en el behavior por defecto:
+  # no se usan CustomErrorResponses porque reescribirian tambien los 401/403/404 de /api/*.
+  SpaRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${AWS::StackName}-spa-rewrite
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Rutas de la SPA sin extension sirven index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var lastSegment = request.uri.substring(request.uri.lastIndexOf('/') + 1);
+          if (lastSegment.indexOf('.') === -1) {
+            request.uri = '/index.html';
+          }
+          return request;
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub ${AWS::StackName} portal de notas
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: frontend-s3
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt FrontendOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+          - Id: api-ec2
+            DomainName: !GetAtt ApiInstance.PublicDnsName
+            CustomOriginConfig:
+              HTTPPort: 80
+              OriginProtocolPolicy: http-only
+              OriginReadTimeout: 30
+        DefaultCacheBehavior:
+          TargetOriginId: frontend-s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed-CachingOptimized. Respeta el Cache-Control con el que deploy.sh sube cada
+          # archivo (index.html no-cache, assets/ inmutables), igual que nginx en local.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SpaRewriteFunction.FunctionMetadata.FunctionARN
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api-ec2
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            # Managed-CachingDisabled + Managed-AllViewerExceptHostHeader: nada se cachea y la
+            # API recibe cookies, query string y cabeceras del navegador.
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+  # ---------------------------------------------------------------------------------------------
+  # API: EC2 con Docker Compose (api + postgres + migrate)
+  # ---------------------------------------------------------------------------------------------
+  ApiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Portal API - HTTP 80 as CloudFront origin, optional SSH
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP API - CloudFront origin
+        - !If
+          - HasSsh
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: !Ref AllowedSshCidr
+            Description: SSH
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-api
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Portal metrics Lambda - outbound to PostgreSQL on the API instance
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-metrics
+
+  # Regla aparte (no dentro de ApiSecurityGroup) para no crear dependencias circulares.
+  DbIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt ApiSecurityGroup.GroupId
+      SourceSecurityGroupId: !GetAtt LambdaSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      Description: PostgreSQL from the metrics Lambda
+
+  ApiInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: portal-api
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadApiBundle
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/${ApiBundleKey}
+              # ARN construido con el nombre fijo de la función: referenciar MetricsFunction
+              # crearía un ciclo (la función necesita la IP privada de la instancia).
+              - Sid: InvokeMetricsFunction
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-metrics
+
+  ApiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ApiInstanceRole
+
+  ApiInstance:
+    Type: AWS::EC2::Instance
+    # El stack espera a que el UserData confirme que /api/health responde (o falle).
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT25M
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref ApiInstanceProfile
+      KeyName: !If [HasSsh, !Ref KeyName, !Ref AWS::NoValue]
+      # IP pública en la interfaz: da PublicDnsName (origen de CloudFront) y salida a Internet
+      # sin NAT Gateway.
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref SubnetId
+          GroupSet:
+            - !GetAtt ApiSecurityGroup.GroupId
+          AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+      # IMDSv2 con 2 saltos: el SDK dentro del contenedor (red bridge) obtiene las credenciales
+      # del rol de la instancia.
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-api
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Primer arranque: Docker + Compose, bundle de S3, .env y `docker compose up -d --build`.
+          # Registro en /var/log/portal-bootstrap.log.
+          set -Eeuo pipefail
+          exec > >(tee -a /var/log/portal-bootstrap.log) 2>&1
+          export HOME=/root
+
+          APP_DIR=/opt/portal
+          COMPOSE_VERSION=v2.39.4
+          BUILDX_VERSION=v0.26.1
+
+          signal() {
+            /opt/aws/bin/cfn-signal --exit-code "$1" --stack '${AWS::StackName}' \
+              --resource ApiInstance --region '${AWS::Region}' || true
+          }
+          trap 'signal 1' ERR
+
+          dnf install -y aws-cfn-bootstrap docker unzip
+
+          # t3.micro tiene 1 GB de RAM: sin swap, `npm ci` + `nest build` pueden quedarse sin memoria.
+          if [ ! -f /swapfile ]; then
+            dd if=/dev/zero of=/swapfile bs=1M count=2048
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap defaults 0 0' >> /etc/fstab
+          fi
+
+          systemctl enable --now docker
+
+          # Amazon Linux 2023 no empaqueta Compose v2 ni buildx: mismas versiones que en local.
+          PLUGINS=/usr/local/lib/docker/cli-plugins
+          mkdir -p "$PLUGINS"
+          curl -fsSL --retry 3 -o "$PLUGINS/docker-compose" \
+            "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+          curl -fsSL --retry 3 -o "$PLUGINS/docker-buildx" \
+            "https://github.com/docker/buildx/releases/download/$BUILDX_VERSION/buildx-$BUILDX_VERSION.linux-amd64"
+          chmod +x "$PLUGINS/docker-compose" "$PLUGINS/docker-buildx"
+          docker compose version
+
+          mkdir -p "$APP_DIR"
+          aws s3 cp 's3://${ArtifactBucket}/${ApiBundleKey}' /tmp/portal.zip --region '${AWS::Region}'
+          unzip -oq /tmp/portal.zip -d "$APP_DIR"
+          rm -f /tmp/portal.zip
+
+          # Mismos nombres que docker-compose.yml y .env.example. Comillas simples: sin interpolación.
+          umask 077
+          cat > "$APP_DIR/infra/ec2/.env" <<'EOF'
+          POSTGRES_PASSWORD='${DbPassword}'
+          JWT_SECRET='${JwtSecret}'
+          SEED_ADMIN_PASSWORD='${SeedAdminPassword}'
+          SEED_USER_PASSWORD='${SeedUserPassword}'
+          COOKIE_SECURE=true
+          METRICS_FUNCTION_NAME=${AWS::StackName}-metrics
+          AWS_REGION=${AWS::Region}
+          EOF
+          umask 022
+
+          cd "$APP_DIR/infra/ec2"
+          docker compose up -d --build
+
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost/api/health; then
+              signal 0
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'La API no responde en /api/health' >&2
+          signal 1
+          exit 1
+
+  # ---------------------------------------------------------------------------------------------
+  # Lambda de métricas: consulta PostgreSQL en la instancia por IP privada
+  # ---------------------------------------------------------------------------------------------
+  # Log group dentro del stack: se elimina con él (si lo creara Lambda, sobreviviría a teardown).
+  MetricsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-metrics
+      RetentionInDays: 7
+
+  MetricsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      # Mismo empaquetado que `npm run build` de lambda/metrics: dist/index.js con pg incluido.
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/index.ts
+        Target: node22
+        Format: cjs
+        External:
+          - pg-native
+        Minify: false
+        Sourcemap: false
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-metrics
+      Description: Total de notas y distribucion por estado (dashboard)
+      CodeUri: ../lambda/metrics
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 256
+      Timeout: 10
+      LoggingConfig:
+        LogFormat: Text
+        LogGroup: !Ref MetricsLogGroup
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt LambdaSecurityGroup.GroupId
+        SubnetIds:
+          - !Ref SubnetId
+      # Mismas variables PG* que el servicio metrics-lambda de Compose. AWS_REGION la define el
+      # propio runtime de Lambda (es una variable reservada).
+      Environment:
+        Variables:
+          PGHOST: !GetAtt ApiInstance.PrivateIp
+          PGPORT: '5432'
+          PGUSER: app
+          PGPASSWORD: !Ref DbPassword
+          PGDATABASE: portal
+
+Outputs:
+  CloudFrontUrl:
+    Description: URL de la aplicacion
+    Value: !Sub https://${Distribution.DomainName}
+  FrontendBucketName:
+    Description: Bucket con el build del frontend
+    Value: !Ref FrontendBucket
+  DistributionId:
+    Description: Distribucion de CloudFront (invalidaciones)
+    Value: !Ref Distribution
+  ApiInstanceId:
+    Description: Instancia EC2 de la API
+    Value: !Ref ApiInstance
+  MetricsFunctionName:
+    Description: Lambda de metricas
+    Value: !Ref MetricsFunction
