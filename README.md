@@ -7,7 +7,7 @@ cuenta de AWS) e incluye la infraestructura como código y los scripts para desp
 
 - **Guion de la presentación:** [docs/GUION_VIDEO.md](docs/GUION_VIDEO.md)
 - **Planeación, decisiones y contratos:** [docs/PLANEACION.md](docs/PLANEACION.md)
-- **Versión entregada:** tag [`entrega-v1`](../../tree/entrega-v1)
+- **Versión entregada:** tag `entrega-v1` del repositorio (`git checkout entrega-v1`)
 
 ## Contenido
 

@@ -220,8 +220,8 @@ flowchart LR
 │   ├── template.yaml       SAM/CloudFormation
 │   ├── ec2/docker-compose.yml
 │   └── env.sam-local.json
-├── scripts/{deploy,teardown,smoke}.sh
-├── docs/{PLANEACION.md,api.http}
+├── scripts/{deploy,teardown,smoke,aws-common}.sh
+├── docs/{PLANEACION.md,GUION_VIDEO.md}
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
