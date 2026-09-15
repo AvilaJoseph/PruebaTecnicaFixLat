@@ -222,3 +222,245 @@ h1 {
   flex: 1;
   padding: 1.5rem;
 }
+
+.button--small {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.button--link {
+  background: none;
+  color: var(--color-muted);
+  padding-inline: 0.4rem;
+}
+
+.button--link:not(:disabled):hover {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Tablero */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  /* Alto de la ventana menos la barra superior y el padding de .page. */
+  height: calc(100vh - 6.5rem);
+  height: calc(100dvh - 6.5rem);
+  min-height: 28rem;
+}
+
+.board__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+.board__toolbar h1 {
+  margin: 0;
+}
+
+.board__hint {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.board__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.board__notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.board__notice-close {
+  padding: 0 0.25rem;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.board__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: #fbfcfe;
+}
+
+.board__canvas {
+  position: relative;
+  background-image:
+    linear-gradient(to right, #e8edf3 1px, transparent 1px),
+    linear-gradient(to bottom, #e8edf3 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.board__empty {
+  position: absolute;
+  top: 2.5rem;
+  left: 2.5rem;
+  margin: 0;
+}
+
+/* Nota: el color depende del estado (Pendiente / En curso / Hecho) */
+
+.note {
+  --note-bg: #fff7cc;
+  --note-accent: #f3d86b;
+
+  position: absolute;
+  width: 240px;
+  background: var(--note-bg);
+  border: 1px solid var(--note-accent);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.note--in_progress {
+  --note-bg: #e4efff;
+  --note-accent: #a3c4f5;
+}
+
+.note--done {
+  --note-bg: #e3f5e8;
+  --note-accent: #98d4aa;
+}
+
+.note--dirty {
+  outline: 2px dashed #d97706;
+  outline-offset: 2px;
+}
+
+.note--dragging {
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+}
+
+.note__handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.15rem 0.2rem 0.15rem 0.6rem;
+  background: var(--note-accent);
+  border-radius: 7px 7px 0 0;
+  cursor: grab;
+  /* Sin gestos del navegador ni selección de texto: el arrastre es táctil y con ratón. */
+  touch-action: none;
+  user-select: none;
+}
+
+.note--dragging .note__handle {
+  cursor: grabbing;
+}
+
+.note__grip {
+  color: rgba(0, 0, 0, 0.4);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.note__delete {
+  display: inline-flex;
+  padding: 0.3rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.note__delete:not(:disabled):hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #9b1c1c;
+}
+
+.note__delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.note__form {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+}
+
+.note__title,
+.note__body,
+.note__status {
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.55);
+  color: inherit;
+  font: inherit;
+}
+
+.note__title:hover,
+.note__body:hover,
+.note__status:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.note__title:focus,
+.note__body:focus,
+.note__status:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 0;
+  background: #fff;
+}
+
+.note__title {
+  font-weight: 700;
+}
+
+.note__title[aria-invalid='true'] {
+  border-color: #e02424;
+}
+
+.note__body {
+  min-height: 5rem;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.note__status {
+  font-size: 0.85rem;
+}
+
+.note__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+}
+
+.note__state {
+  flex: 1;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.note__state--dirty {
+  color: #8a5a00;
+  font-weight: 600;
+}
+
+.note__state--error {
+  color: #9b1c1c;
+  font-weight: 600;
+}
