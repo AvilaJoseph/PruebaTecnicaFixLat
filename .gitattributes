@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Scripts ejecutados en contenedores Linux: siempre LF (evita CRLF al clonar en Windows)
+*.sh text eol=lf

@@ -1,0 +1,72 @@
+# Entorno local completo:  docker compose up -d --build  →  http://localhost:8080
+# Funciona sin crear .env: cada variable tiene aquí su valor de demo por defecto
+# (para cambiarlos, copia .env.example a .env).
+
+x-database-url: &database-url "postgres://app:${POSTGRES_PASSWORD:-app}@db:5432/portal"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d portal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 1s
+
+  # Tarea de una sola ejecución: aplica las migraciones pendientes (esquema + SeedDemoData) y
+  # termina. TypeORM registra cada migración en la tabla "migrations", así que volver a
+  # ejecutarla no duplica el esquema ni vuelve a sembrar datos.
+  migrate:
+    build: ./api
+    command: ["npm", "run", "migration:run"]
+    environment:
+      DATABASE_URL: *database-url
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin123!}
+      SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-Usuario123!}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      DATABASE_URL: *database-url
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
