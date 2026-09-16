@@ -5,6 +5,7 @@ tipo post-it que se editan y arrastran libremente, un **dashboard** cuyas métri
 **AWS Lambda**, y **administración de usuarios**. Corre completa en local con Docker Compose (sin
 cuenta de AWS) e incluye la infraestructura como código y los scripts para desplegarla en AWS.
 
+- **Video de la presentación:** [ver en Google Drive](https://drive.google.com/file/d/1KNgqWYWIidN6shY7gBdXtnpHcXOiF64j/view?usp=sharing)
 - **Guion de la presentación:** [docs/GUION_VIDEO.md](docs/GUION_VIDEO.md)
 - **Planeación, decisiones y contratos:** [docs/PLANEACION.md](docs/PLANEACION.md)
 - **Versión entregada:** tag `entrega-v1` del repositorio (`git checkout entrega-v1`)
@@ -407,5 +408,5 @@ El trabajo se hizo en sesiones cortas con alcance y pruebas propias
   y pruebas manuales.
 - **Concurrencia:** la última escritura gana y no hay actualización en tiempo real (fuera del
   alcance del enunciado).
-- **Video:** pendiente de grabar siguiendo [docs/GUION_VIDEO.md](docs/GUION_VIDEO.md). Enlace:
-  ⟨completar⟩.
+- **Video:** grabado siguiendo [docs/GUION_VIDEO.md](docs/GUION_VIDEO.md). Enlace:
+  <https://drive.google.com/file/d/1KNgqWYWIidN6shY7gBdXtnpHcXOiF64j/view?usp=sharing>.
